@@ -133,7 +133,11 @@ _Code_: `IngredientReview`
 **Approbation**:
 Décision « approuvé » d'une revue, réutilisable pour le laboratoire jusqu'à expiration ou modification essentielle de l'ingrédient.
 _Avoid_: Validation définitive, agrément
-_Code_: `IngredientReviewDecision::Approved`
+_Code_: `IngredientReviewDecision::Approved`, `LabIngredientStatusService`
+
+**Statut de validation**:
+État calculé d'un ingrédient du laboratoire à partir de sa dernière revue, de l'empreinte des champs essentiels et de la date de validité.
+_Code_: `LabIngredientStatus`
 
 **Demande d'information**:
 Décision de revue suspendant la validation jusqu'à correction et nouvelle soumission, sans perte de l'historique.

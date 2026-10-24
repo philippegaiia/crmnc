@@ -6,6 +6,7 @@ use App\Enums\DocumentControlStatus;
 use App\Enums\DocumentType;
 use App\Enums\IngredientReviewStatus;
 use App\Enums\UserRole;
+use App\Models\Document;
 use App\Models\IngredientReview;
 use App\Models\LabIngredient;
 use App\Models\User;
@@ -14,6 +15,82 @@ use Illuminate\Validation\ValidationException;
 
 class IngredientReviewSubmissionService
 {
+    /**
+     * Build the canonical submission snapshot, including display labels.
+     *
+     * @return array<string, mixed>
+     */
+    public function snapshotFor(LabIngredient $ingredient): array
+    {
+        $ingredient->loadMissing(['ingredientRef', 'supplier']);
+
+        return [
+            'ingredient_ref_id' => $ingredient->ingredient_ref_id,
+            'ingredient_ref' => [
+                'display_name' => $ingredient->ingredientRef->display_name,
+                'normalized_inci' => $ingredient->ingredientRef->normalized_inci,
+            ],
+            'supplier_id' => $ingredient->supplier_id,
+            'supplier' => [
+                'legal_name' => $ingredient->supplier->legal_name,
+            ],
+            'commercial_name' => $ingredient->commercial_name,
+            'supplier_reference' => $ingredient->supplier_reference,
+            'grade' => $ingredient->grade,
+            'organic_certification_status' => $ingredient->organic_certification_status->value,
+            'organic_content_percentage' => $ingredient->organic_content_percentage,
+            'components' => [],
+        ];
+    }
+
+    /**
+     * Return every document ID of the ingredient in ascending order.
+     *
+     * @return list<int>
+     */
+    public function documentIdsFor(LabIngredient $ingredient): array
+    {
+        $documents = $ingredient->relationLoaded('documents')
+            ? $ingredient->documents
+            : $ingredient->documents()->orderBy('id')->get();
+
+        $documentIds = $documents
+            ->map(fn (Document $document): int => (int) $document->getKey())
+            ->sort()
+            ->values()
+            ->all();
+
+        return array_values($documentIds);
+    }
+
+    /**
+     * Compute the canonical approval fingerprint.
+     *
+     * Display labels are deliberately excluded: renaming a supplier or correcting an
+     * INCI spelling must not invalidate approvals. Only essential fields and the
+     * reviewed document IDs participate.
+     *
+     * @param  list<int>  $documentIds
+     */
+    public function fingerprintFor(LabIngredient $ingredient, array $documentIds): string
+    {
+        $essentialFields = [
+            'ingredient_ref_id' => $ingredient->ingredient_ref_id,
+            'supplier_id' => $ingredient->supplier_id,
+            'commercial_name' => $ingredient->commercial_name,
+            'supplier_reference' => $ingredient->supplier_reference,
+            'grade' => $ingredient->grade,
+            'organic_certification_status' => $ingredient->organic_certification_status->value,
+            'organic_content_percentage' => $ingredient->organic_content_percentage,
+            'components' => [],
+        ];
+
+        return hash('sha256', json_encode(
+            [$essentialFields, $documentIds],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        ));
+    }
+
     public function submit(LabIngredient $ingredient, User $submitter): IngredientReview
     {
         return DB::transaction(function () use ($ingredient, $submitter): IngredientReview {
@@ -35,8 +112,10 @@ class IngredientReviewSubmissionService
                 ->orderBy('id')
                 ->get();
 
+            $lockedIngredient->setRelation('documents', $documents);
+
             $hasRequiredEvidence = $documents->contains(
-                fn ($document): bool => in_array($document->type, [
+                fn (Document $document): bool => in_array($document->type, [
                     DocumentType::TechnicalSheet,
                     DocumentType::Certificate,
                 ], true),
@@ -48,28 +127,9 @@ class IngredientReviewSubmissionService
                 ]);
             }
 
-            $snapshot = [
-                'ingredient_ref_id' => $lockedIngredient->ingredient_ref_id,
-                'ingredient_ref' => [
-                    'display_name' => $lockedIngredient->ingredientRef->display_name,
-                    'normalized_inci' => $lockedIngredient->ingredientRef->normalized_inci,
-                ],
-                'supplier_id' => $lockedIngredient->supplier_id,
-                'supplier' => [
-                    'legal_name' => $lockedIngredient->supplier->legal_name,
-                ],
-                'commercial_name' => $lockedIngredient->commercial_name,
-                'supplier_reference' => $lockedIngredient->supplier_reference,
-                'grade' => $lockedIngredient->grade,
-                'organic_certification_status' => $lockedIngredient->organic_certification_status->value,
-                'organic_content_percentage' => $lockedIngredient->organic_content_percentage,
-                'components' => [],
-            ];
-            $documentIds = $documents->modelKeys();
-            $fingerprint = hash('sha256', json_encode(
-                [$snapshot, $documentIds],
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
-            ));
+            $snapshot = $this->snapshotFor($lockedIngredient);
+            $documentIds = $this->documentIdsFor($lockedIngredient);
+            $fingerprint = $this->fingerprintFor($lockedIngredient, $documentIds);
 
             $review = $lockedIngredient->reviews()->create([
                 'submitted_by' => $submitter->getKey(),

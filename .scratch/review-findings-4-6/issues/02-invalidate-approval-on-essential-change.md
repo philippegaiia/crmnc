@@ -1,6 +1,6 @@
 # 02 — Approval is valid only while the fingerprint matches
 
-Status: ready-for-agent
+Status: resolved
 Finding: 4 (part 2 of 2)
 Blocked by: 01
 
@@ -105,3 +105,13 @@ Add to `tests/Feature/ProductCockpitTest.php`:
 
 - The tests above plus the full suite pass, and the gate in `spec.md` is green.
 - Committed as `fix: invalidate ingredient approval when its fingerprint changes`.
+
+## Comments
+
+- `IngredientReviewSubmissionService` now exposes `snapshotFor()`, `documentIdsFor()` and `fingerprintFor()`. `submit()` uses the three methods; the fingerprint covers only the essential fields plus the reviewed document IDs, so display-label renames do not invalidate approvals.
+- Added `App\Enums\LabIngredientStatus` (seven French-labelled, coloured cases) and `App\Services\LabIngredientStatusService` with `status()` and `hasValidApproval()`. A fingerprint mismatch wins over an expired approval; `valid_until` today still counts as valid.
+- Wired in: `ProductReadinessService` injects the status service and eager loads `latestReview` and `documents`; the ingredients table and infolist show « Statut de validation »; the edit page only offers « Soumettre pour revue » for statuses that need a submission; `CONTEXT.md` documents the new vocabulary.
+- Tests added to `tests/Feature/LabIngredientStatusTest.php`: the seven ticket tests (the essential-field test runs a five-case dataset). Added `blocks readiness when an approved ingredient changed after approval` to `tests/Feature/ProductCockpitTest.php`.
+- Updated the existing cockpit test `counts unresolved formula lines instead of unrelated pending ingredient reviews`: its approved-ingredient fixture used a random factory fingerprint, which the new rule correctly rejects. It now submits and decides a real review so the fingerprint matches. The test's original assertion is unchanged.
+- Gate: 85 tests passing, PHPStan 0 errors, Filacheck 2 pre-existing `Placeholder` warnings. `graphify update .` run successfully.
+- Nothing left open; no deviation from the plan.

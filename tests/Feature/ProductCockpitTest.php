@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\DocumentType;
 use App\Enums\IngredientReviewDecision;
 use App\Enums\IngredientReviewStatus;
 use App\Filament\Resources\Products\Pages\ViewProduct;
+use App\Models\Document;
 use App\Models\Formula;
 use App\Models\FormulaLine;
 use App\Models\FormulaVersion;
@@ -11,6 +13,7 @@ use App\Models\IngredientReview;
 use App\Models\LabIngredient;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\IngredientReviewSubmissionService;
 use App\Services\ProductReadinessService;
 use Filament\Facades\Filament;
 
@@ -46,7 +49,12 @@ it('counts unresolved formula lines instead of unrelated pending ingredient revi
         ->for($resolvedReference, 'ingredientRef')
         ->create();
 
-    IngredientReview::factory()->for($approvedIngredient)->create([
+    Document::factory()
+        ->for($approvedIngredient, 'documentable')
+        ->create(['type' => DocumentType::Certificate]);
+
+    $approvedReview = app(IngredientReviewSubmissionService::class)->submit($approvedIngredient, $user);
+    $approvedReview->update([
         'status' => IngredientReviewStatus::Decided,
         'decision' => IngredientReviewDecision::Approved,
         'decided_at' => now(),
@@ -129,4 +137,49 @@ it('renders the product cockpit with precise unresolved formula lines', function
         ->assertSee('Avant de soumettre')
         ->assertSee('2 lignes de formule sans ingrédient laboratoire affecté.')
         ->assertSee("Maquette à plat de l'étiquette");
+});
+
+it('blocks readiness when an approved ingredient changed after approval', function () {
+    $user = User::factory()->adherent()->create();
+    $formula = Formula::factory()->for($user->company)->create();
+    $version = FormulaVersion::factory()->for($formula)->create();
+    $ingredientReference = IngredientRef::factory()->create();
+    $ingredient = LabIngredient::factory()
+        ->for($user->company)
+        ->for($ingredientReference, 'ingredientRef')
+        ->create();
+
+    Document::factory()
+        ->for($ingredient, 'documentable')
+        ->create(['type' => DocumentType::Certificate]);
+
+    $review = app(IngredientReviewSubmissionService::class)->submit($ingredient, $user);
+    $review->update([
+        'status' => IngredientReviewStatus::Decided,
+        'decision' => IngredientReviewDecision::Approved,
+        'decided_at' => now(),
+        'valid_until' => now()->addYear(),
+    ]);
+
+    FormulaLine::factory()
+        ->for($version, 'version')
+        ->for($ingredientReference, 'ingredient')
+        ->for($ingredient, 'labIngredient')
+        ->create(['percentage' => 100]);
+
+    $product = Product::factory()->for($user->company)->create([
+        'current_formula_version_id' => $version->getKey(),
+    ]);
+
+    $service = app(ProductReadinessService::class);
+
+    expect(collect($service->assess($product)['checks'])->keyBy('key')['ingredient_approvals']['passed'])
+        ->toBeTrue();
+
+    $ingredient->update(['grade' => 'Nouveau grade']);
+
+    $freshProduct = Product::query()->findOrFail($product->getKey());
+
+    expect(collect($service->assess($freshProduct)['checks'])->keyBy('key')['ingredient_approvals']['passed'])
+        ->toBeFalse();
 });

@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\LabIngredients\Pages;
 
+use App\Enums\LabIngredientStatus;
 use App\Filament\Resources\LabIngredients\LabIngredientResource;
 use App\Models\LabIngredient;
 use App\Models\User;
 use App\Services\IngredientReviewSubmissionService;
+use App\Services\LabIngredientStatusService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
@@ -25,7 +27,19 @@ class EditLabIngredient extends EditRecord
                 ->icon('heroicon-o-paper-airplane')
                 ->requiresConfirmation()
                 ->modalDescription('Les informations et documents actuels seront figés pour permettre leur contrôle.')
-                ->visible(fn (): bool => $this->record instanceof LabIngredient && ! $this->record->hasPendingReview())
+                ->visible(function (LabIngredientStatusService $statusService): bool {
+                    if (! $this->record instanceof LabIngredient) {
+                        return false;
+                    }
+
+                    return in_array($statusService->status($this->record), [
+                        LabIngredientStatus::NotSubmitted,
+                        LabIngredientStatus::InformationRequested,
+                        LabIngredientStatus::Refused,
+                        LabIngredientStatus::ChangedSinceApproval,
+                        LabIngredientStatus::ApprovalExpired,
+                    ], true);
+                })
                 ->action(function (IngredientReviewSubmissionService $submissionService): void {
                     $user = Filament::auth()->user();
 

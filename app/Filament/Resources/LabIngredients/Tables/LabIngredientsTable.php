@@ -2,18 +2,23 @@
 
 namespace App\Filament\Resources\LabIngredients\Tables;
 
+use App\Enums\LabIngredientStatus;
+use App\Models\LabIngredient;
+use App\Services\LabIngredientStatusService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class LabIngredientsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['latestReview', 'documents']))
             ->columns([
                 TextColumn::make('company.legal_name')->label('Société')->searchable()->sortable(),
                 TextColumn::make('ingredientRef.display_name')->label('Ingrédient générique')->searchable()->sortable(),
@@ -37,10 +42,10 @@ class LabIngredientsTable
                     ->label('Documents')
                     ->counts('documents')
                     ->badge(),
-                TextColumn::make('latestReview.status')
-                    ->label('Revue')
+                TextColumn::make('validation_status')
+                    ->label('Statut de validation')
                     ->badge()
-                    ->placeholder('Brouillon'),
+                    ->state(fn (LabIngredient $record): LabIngredientStatus => app(LabIngredientStatusService::class)->status($record)),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

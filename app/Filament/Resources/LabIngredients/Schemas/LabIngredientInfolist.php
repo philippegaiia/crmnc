@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\LabIngredients\Schemas;
 
+use App\Enums\LabIngredientStatus;
 use App\Models\Document;
+use App\Models\LabIngredient;
+use App\Services\LabIngredientStatusService;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -40,10 +43,10 @@ class LabIngredientInfolist
                     ->columnSpanFull(),
                 Section::make('Caractéristiques biologiques')
                     ->schema([
-                        TextEntry::make('latestReview.status')
-                            ->label('Statut de la revue')
+                        TextEntry::make('validation_status')
+                            ->label('Statut de validation')
                             ->badge()
-                            ->placeholder('Brouillon'),
+                            ->state(fn (LabIngredient $record): LabIngredientStatus => app(LabIngredientStatusService::class)->status($record)),
                         TextEntry::make('ingredientRef.origin')
                             ->label('Origine générique')
                             ->badge(),

@@ -2,15 +2,16 @@
 
 namespace App\Services;
 
-use App\Enums\IngredientReviewDecision;
-use App\Enums\IngredientReviewStatus;
 use App\Models\FormulaLine;
-use App\Models\LabIngredient;
 use App\Models\Product;
 use Illuminate\Support\Collection;
 
 class ProductReadinessService
 {
+    public function __construct(
+        private readonly LabIngredientStatusService $statusService,
+    ) {}
+
     /**
      * @return array{
      *     stage: string,
@@ -26,6 +27,7 @@ class ProductReadinessService
             'category',
             'currentFormulaVersion.formula',
             'currentFormulaVersion.lines.labIngredient.latestReview',
+            'currentFormulaVersion.lines.labIngredient.documents',
         ]);
 
         $version = $product->current_formula_version_id === null
@@ -36,7 +38,8 @@ class ProductReadinessService
         $missingAssignments = $lines->whereNull('lab_ingredient_id')->count();
         $assignedLines = $lines->whereNotNull('lab_ingredient_id');
         $invalidApprovalCount = $assignedLines
-            ->filter(fn (FormulaLine $line): bool => ! $this->hasValidApproval($line->labIngredient))
+            ->filter(fn (FormulaLine $line): bool => $line->labIngredient === null
+                || ! $this->statusService->hasValidApproval($line->labIngredient))
             ->count();
 
         $checks = [
@@ -138,18 +141,5 @@ class ProductReadinessService
         return $invalidApprovalCount === 1
             ? "1 ingrédient affecté n'a pas d'approbation valide."
             : "{$invalidApprovalCount} ingrédients affectés n'ont pas d'approbation valide.";
-    }
-
-    private function hasValidApproval(?LabIngredient $ingredient): bool
-    {
-        $review = $ingredient?->latestReview;
-
-        if ($review === null
-            || $review->status !== IngredientReviewStatus::Decided
-            || $review->decision !== IngredientReviewDecision::Approved) {
-            return false;
-        }
-
-        return $review->valid_until === null || $review->valid_until->greaterThanOrEqualTo(today());
     }
 }
