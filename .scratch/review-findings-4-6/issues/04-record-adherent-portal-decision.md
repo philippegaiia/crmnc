@@ -1,6 +1,6 @@
 # 04 — Record the two-panel decision in the docs
 
-Status: ready-for-agent
+Status: resolved
 Finding: 5
 Blocked by: 03 (only so commits stay in order; no shared files)
 
@@ -55,3 +55,14 @@ None needed; this is docs only. Still run the gate in `spec.md`, which must stay
 
 - `grep -n -i "single.*panel\|one filament panel" BUILD_SPEC.md START_HERE.md README.md` returns nothing that contradicts the ADR.
 - Committed as `docs: record the separate adherent portal decision`.
+
+## Comments
+
+- Added the French ADR `docs/decisions/adherent-portal-panel.md` (24 octobre 2026, statut « Acceptée ») covering the two-panel context, the role split and its consequences.
+- `BUILD_SPEC.md`: §1 now describes both panels and links the ADR; §3 states the `canAccessPanel()` rules while keeping the policies/scoped-queries and `company_id` requirements; §8 states that adherent screens live in `/portal` and internal screens in `/admin`.
+- `START_HERE.md` describes both existing panels and replaces the single-panel rule with the two-panel rule pointing to the ADR.
+- `README.md`: demo accounts now state that staff sign in at `/admin` and the adherent at `/portal`.
+- No application code or tests changed; `tests/Feature/PanelBoundaryTest.php` already covers the two-panel access rules.
+- `grep -n -i "single.*panel\|one filament panel" BUILD_SPEC.md START_HERE.md README.md` returns nothing.
+- Gate: 88 tests passing, PHPStan 0 errors, Filacheck 2 pre-existing `Placeholder` warnings. `graphify update .` run successfully.
+- Nothing left open; no deviation from the plan.

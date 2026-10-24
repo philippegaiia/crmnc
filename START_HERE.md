@@ -15,7 +15,7 @@ If these documents conflict, stop and report the conflict. Do not silently inven
 ## Current repository state
 
 - Laravel, Filament, Livewire and Pest are installed; the application is otherwise the initial scaffold.
-- One Filament panel already exists at `/admin`.
+- Two Filament panels already exist: `/admin` for internal staff and `/portal` for adherents (see `docs/decisions/adherent-portal-panel.md`).
 - The project specifications and documentation have been copied into the repository.
 - Graphify is installed locally. Create the baseline project graph before the first code change, then update it incrementally after every code-generation batch.
 - `AGENTS.md` is the existing Laravel/Filament execution guide and must not be replaced.
@@ -32,7 +32,7 @@ If these documents conflict, stop and report the conflict. Do not silently inven
 - Membership activation is a manual admin/gestionnaire action; payment never auto-activates it.
 - Evaluation SLA pauses while the evaluation is `en_attente` and resumes with the remaining duration preserved.
 - Prototype notifications use French templates; the recipient's preferred language remains stored for later translation.
-- Use a single role-aware Filament `/admin` panel unless an approved specification change says otherwise.
+- Keep the two Filament panels: `/portal` for adherent users and `/admin` for internal users, as recorded in `docs/decisions/adherent-portal-panel.md`.
 - Implement the system as connected vertical slices so the adherent and evaluator workflows work together throughout development.
 
 ## How to start

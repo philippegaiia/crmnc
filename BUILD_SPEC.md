@@ -26,7 +26,7 @@ The prototype is complete only when an adherent and an evaluator can execute thi
 - Pest 4
 - SQLite with foreign keys enabled; WAL for the local prototype
 - Laravel Herd; resolve the project URL through Herd rather than hard-coding the scheme
-- One Filament panel at `/admin`, with navigation and data access adapted to the authenticated role
+- Two Filament panels share the same models, policies and services: `/portal` for adherents and `/admin` for the association team (see `docs/decisions/adherent-portal-panel.md`)
 - French interface; English class, table, column and enum-value names
 
 ### Environment
@@ -85,7 +85,7 @@ PHP backed enums use TitleCase case names, snake_case English backed values, and
 | Evaluate formulas and grant/lift derogations | Yes | No | Yes | No |
 | Issue, replace or revoke attestations | Yes | Yes | Read | Download own only |
 
-All four roles may authenticate into the single Filament panel. Navigation hides unauthorized resources and actions. `User::canAccessPanel()` must allow active users with one of these roles; policies and scoped queries determine what they can see.
+`User::canAccessPanel()` allows active users whose role is not `adherent` into the `/admin` panel, and active `adherent` users with a non-null `company_id` into the `/portal` panel. Navigation hides unauthorized resources and actions. Policies and scoped queries determine what each user can see.
 
 `users.company_id` is required for the `adherent` role and must be null for internal roles. Enforce this in validation and tests.
 
@@ -279,6 +279,8 @@ Deduplication is byte-level after normalization. It detects identical normalized
 ## 8. Filament experience
 
 ### Role-aware navigation
+
+Adherent screens live in `/portal` and internal screens live in `/admin` (see `docs/decisions/adherent-portal-panel.md`).
 
 - **Relation:** companies, contacts, memberships, payments, activities.
 - **Certification:** products, formulas, versions, formula evaluations, ingredient reviews, derogations, attestations.

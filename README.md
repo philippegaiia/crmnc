@@ -38,6 +38,8 @@ All four accounts use the local value of `SEED_USER_PASSWORD`:
 - `comite@crmnc.test` — évaluateur scientifique;
 - `adherent@crmnc.test` — adhérent.
 
+Staff sign in at `/admin`; the adherent account signs in at `/portal`.
+
 Never commit a real password or reuse these credentials outside local/testing environments.
 
 ## Documentation map
