@@ -1,0 +1,13 @@
+# Third-party dependencies
+vendor/
+node_modules/
+
+# Generated frontend and public assets
+public/
+
+# Runtime data, caches, logs and uploaded documents
+storage/
+bootstrap/cache/
+
+# Graphify output is already excluded internally; keep this explicit for readers.
+graphify-out/
