@@ -79,6 +79,49 @@ class LabIngredient extends Model
         return $this->hasOne(IngredientReview::class)->latestOfMany();
     }
 
+    /**
+     * IDs of documents captured by any review snapshot, read from the loaded reviews relation.
+     *
+     * The relation is loaded once and reused, so per-item form checks do not query per document.
+     *
+     * @return list<int>
+     */
+    public function reviewedDocumentIds(): array
+    {
+        $this->loadMissing('reviews');
+
+        return self::documentIdsFromReviews($this->reviews);
+    }
+
+    /**
+     * IDs of documents captured by any review snapshot, always read fresh from the database.
+     *
+     * @return list<int>
+     */
+    public static function reviewedDocumentIdsFor(int $ingredientId): array
+    {
+        return self::documentIdsFromReviews(
+            IngredientReview::query()->where('lab_ingredient_id', $ingredientId)->get(['submitted_document_ids']),
+        );
+    }
+
+    /**
+     * @param  iterable<IngredientReview>  $reviews
+     * @return list<int>
+     */
+    private static function documentIdsFromReviews(iterable $reviews): array
+    {
+        $documentIds = [];
+
+        foreach ($reviews as $review) {
+            foreach ($review->submitted_document_ids ?? [] as $documentId) {
+                $documentIds[] = (int) $documentId;
+            }
+        }
+
+        return array_values(array_unique($documentIds));
+    }
+
     public function hasPendingReview(): bool
     {
         return $this->reviews()

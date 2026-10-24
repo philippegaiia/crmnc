@@ -12,8 +12,8 @@ use App\Models\User;
 use App\Services\IngredientReviewSubmissionService;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 use function Pest\Livewire\livewire;
@@ -200,15 +200,11 @@ it('still allows editing documents that were never reviewed', function () {
 });
 
 it('does not delete a reviewed document from the edit form', function () {
-    Storage::fake('local');
-
     $user = User::factory()->adherent()->create();
     $ingredient = LabIngredient::factory()->for($user->company)->create();
     $document = Document::factory()
         ->for($ingredient, 'documentable')
         ->create(['type' => DocumentType::Certificate]);
-
-    Storage::disk('local')->put($document->file_path, "%PDF-1.4\nreviewed document\n%%EOF\n");
 
     $review = app(IngredientReviewSubmissionService::class)->submit($ingredient, $user);
     $review->update([
@@ -249,4 +245,90 @@ it('submits an ingredient from its Filament edit action', function () {
         ->assertNotified();
 
     expect($ingredient->reviews()->sole()->status)->toBe(IngredientReviewStatus::Submitted);
+});
+
+/**
+ * Create an ingredient for the adherent's company with certificate documents and an approved review.
+ *
+ * @return array{0: LabIngredient, 1: list<Document>}
+ */
+function createApprovedIngredientWithDocuments(User $user, int $documentCount = 1): array
+{
+    $ingredient = LabIngredient::factory()->for($user->company)->create();
+    $documents = Document::factory()
+        ->count($documentCount)
+        ->for($ingredient, 'documentable')
+        ->create(['type' => DocumentType::Certificate])
+        ->all();
+
+    app(IngredientReviewSubmissionService::class)->submit($ingredient, $user)->update([
+        'status' => IngredientReviewStatus::Decided,
+        'decision' => IngredientReviewDecision::Approved,
+        'decided_at' => now(),
+    ]);
+
+    return [$ingredient, $documents];
+}
+
+it('keeps a reviewed document immutable when it is moved to another ingredient', function () {
+    $user = User::factory()->adherent()->create();
+    [$ingredient, [$document]] = createApprovedIngredientWithDocuments($user);
+    $otherIngredient = LabIngredient::factory()->for($user->company)->create();
+
+    expect(fn () => $document->forceFill(['documentable_id' => $otherIngredient->getKey()])->save())
+        ->toThrow(ValidationException::class)
+        ->and(fn () => $document->refresh()->forceFill([
+            'documentable_id' => $otherIngredient->getKey(),
+            'issuer' => 'Émetteur falsifié',
+        ])->save())
+        ->toThrow(ValidationException::class);
+
+    $document->refresh()->documentable_id = $otherIngredient->getKey();
+
+    expect(fn () => $document->delete())->toThrow(ValidationException::class)
+        ->and($document->refresh()->documentable_id)->toBe($ingredient->getKey())
+        ->and($document->issuer)->not->toBe('Émetteur falsifié');
+});
+
+it('prevents moving a document into an ingredient under pending review', function () {
+    $user = User::factory()->adherent()->create();
+    $pendingIngredient = LabIngredient::factory()->for($user->company)->create();
+    Document::factory()
+        ->for($pendingIngredient, 'documentable')
+        ->create(['type' => DocumentType::Certificate]);
+    app(IngredientReviewSubmissionService::class)->submit($pendingIngredient, $user);
+
+    $looseDocument = Document::factory()
+        ->for(LabIngredient::factory()->for($user->company), 'documentable')
+        ->create(['type' => DocumentType::Other]);
+
+    expect(fn () => $looseDocument->forceFill(['documentable_id' => $pendingIngredient->getKey()])->save())
+        ->toThrow(ValidationException::class);
+});
+
+it('loads reviewed documents once per request on the edit form', function () {
+    $user = User::factory()->adherent()->create();
+    [$singleDocumentIngredient] = createApprovedIngredientWithDocuments($user, 1);
+    [$manyDocumentsIngredient] = createApprovedIngredientWithDocuments($user, 5);
+
+    $this->actingAs($user);
+    Filament::setCurrentPanel('portal');
+
+    $countReviewQueries = function (LabIngredient $ingredient): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        livewire(EditLabIngredient::class, ['record' => $ingredient->getRouteKey()])->assertOk();
+
+        $count = collect(DB::getQueryLog())
+            ->filter(fn (array $query): bool => str_contains($query['query'], 'ingredient_reviews'))
+            ->count();
+        DB::disableQueryLog();
+
+        return $count;
+    };
+
+    expect($countReviewQueries($manyDocumentsIngredient))
+        ->toBe($countReviewQueries($singleDocumentIngredient))
+        ->toBeLessThanOrEqual(5);
 });

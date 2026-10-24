@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property IngredientReviewStatus $status
  * @property IngredientReviewDecision|null $decision
  * @property Carbon|null $valid_until
+ * @property list<int>|null $submitted_document_ids
  */
 #[Fillable([
     'lab_ingredient_id',

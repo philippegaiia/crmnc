@@ -7,6 +7,7 @@ use App\Enums\OrganicCertificationStatus;
 use App\Enums\UserRole;
 use App\Models\Document;
 use App\Models\IngredientRef;
+use App\Models\LabIngredient;
 use App\Models\User;
 use App\Services\CompanyAccessService;
 use Filament\Actions\Action;
@@ -18,6 +19,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -100,11 +102,11 @@ class LabIngredientForm
                                 Select::make('type')
                                     ->label('Type')
                                     ->options(DocumentType::class)
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire))
                                     ->required(),
                                 FileUpload::make('file_path')
                                     ->label('Fichier')
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire))
                                     ->disk('local')
                                     ->directory(fn (): string => 'documents/'.now()->format('Y/m'))
                                     ->visibility('private')
@@ -126,28 +128,28 @@ class LabIngredientForm
                                     ->columnSpanFull(),
                                 DatePicker::make('received_date')
                                     ->label('Reçu / émis le')
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire))
                                     ->default(today())
                                     ->required(),
                                 TextInput::make('issuer')
                                     ->label('Émetteur')
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire))
                                     ->maxLength(255),
                                 DatePicker::make('valid_from')
                                     ->label('Valide du')
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false),
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire)),
                                 DatePicker::make('valid_until')
                                     ->label("Valide jusqu'au")
-                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
+                                    ->disabled(fn (?Document $record, mixed $livewire): bool => self::isReviewedDocument($record, $livewire))
                                     ->afterOrEqual('valid_from'),
                             ])
                             ->columns(2)
                             ->addActionLabel('Ajouter un document')
                             ->deleteAction(fn (Action $action): Action => $action->visible(
-                                function (array $arguments, Repeater $component): bool {
+                                function (array $arguments, Repeater $component, mixed $livewire): bool {
                                     $record = $component->getCachedExistingRecords()->get($arguments['item'] ?? '');
 
-                                    return ! ($record instanceof Document && $record->isReviewed());
+                                    return ! self::isReviewedDocument($record instanceof Document ? $record : null, $livewire);
                                 },
                             ))
                             ->collapsible()
@@ -155,5 +157,23 @@ class LabIngredientForm
                     ])
                     ->columnSpanFull(),
             ]);
+    }
+
+    /**
+     * Check a repeater document against the owner ingredient's reviewed IDs, loaded once per request.
+     */
+    private static function isReviewedDocument(?Document $document, mixed $livewire): bool
+    {
+        if ($document === null || ! $document->exists) {
+            return false;
+        }
+
+        $ingredient = $livewire instanceof EditRecord ? $livewire->getRecord() : null;
+
+        if (! $ingredient instanceof LabIngredient) {
+            return $document->isReviewed();
+        }
+
+        return in_array($document->getKey(), $ingredient->reviewedDocumentIds(), true);
     }
 }

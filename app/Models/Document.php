@@ -81,7 +81,7 @@ class Document extends Model
     protected static function booted(): void
     {
         static::creating(function (Document $document): void {
-            if ($document->belongsToPendingIngredientReview()) {
+            if ($document->belongsToPendingIngredientReview($document->documentable_type, $document->documentable_id)) {
                 throw ValidationException::withMessages([
                     'documents' => 'Les documents soumis ne peuvent pas être modifiés pendant la revue.',
                 ]);
@@ -125,7 +125,19 @@ class Document extends Model
         });
 
         static::updating(function (Document $document): void {
+            if ($document->isDirty(['documentable_type', 'documentable_id'])
+                && $document->belongsToPendingIngredientReview(
+                    $document->documentable_type,
+                    $document->documentable_id,
+                )) {
+                throw ValidationException::withMessages([
+                    'documents' => 'Les documents soumis ne peuvent pas être modifiés pendant la revue.',
+                ]);
+            }
+
             if ($document->isDirty([
+                'documentable_type',
+                'documentable_id',
                 'type',
                 'file_path',
                 'original_name',
@@ -134,7 +146,10 @@ class Document extends Model
                 'valid_until',
                 'replaces_id',
                 'access_level',
-            ]) && $document->belongsToPendingIngredientReview()) {
+            ]) && $document->belongsToPendingIngredientReview(
+                $document->getRawOriginal('documentable_type'),
+                $document->getRawOriginal('documentable_id'),
+            )) {
                 throw ValidationException::withMessages([
                     'documents' => 'Les documents soumis ne peuvent pas être modifiés pendant la revue.',
                 ]);
@@ -153,7 +168,10 @@ class Document extends Model
         });
 
         static::deleting(function (Document $document): void {
-            if ($document->belongsToPendingIngredientReview()) {
+            if ($document->belongsToPendingIngredientReview(
+                $document->getRawOriginal('documentable_type'),
+                $document->getRawOriginal('documentable_id'),
+            )) {
                 throw ValidationException::withMessages([
                     'documents' => 'Les documents soumis ne peuvent pas être supprimés pendant la revue.',
                 ]);
@@ -168,33 +186,43 @@ class Document extends Model
     }
 
     /**
-     * Determine whether this document belongs to a submitted ingredient review snapshot.
+     * Determine whether this document's saved row belongs to a submitted ingredient review snapshot.
+     *
+     * Uses the persisted owner keys so that reassigning the document in memory cannot bypass the guard.
      */
     public function isReviewed(): bool
     {
-        if (! $this->exists || $this->documentable_type !== LabIngredient::class) {
+        if (! $this->exists) {
             return false;
         }
 
-        return IngredientReview::query()
-            ->where('lab_ingredient_id', $this->documentable_id)
-            ->pluck('submitted_document_ids')
-            ->flatten()
-            ->contains($this->getKey());
+        $ownerType = $this->getRawOriginal('documentable_type');
+        $ownerId = $this->getRawOriginal('documentable_id');
+
+        if (! self::isLabIngredientOwner($ownerType, $ownerId)) {
+            return false;
+        }
+
+        return in_array($this->getKey(), LabIngredient::reviewedDocumentIdsFor((int) $ownerId), true);
     }
 
-    private function belongsToPendingIngredientReview(): bool
+    private function belongsToPendingIngredientReview(mixed $ownerType, mixed $ownerId): bool
     {
-        if ($this->documentable_type !== LabIngredient::class) {
+        if (! self::isLabIngredientOwner($ownerType, $ownerId)) {
             return false;
         }
 
         return IngredientReview::query()
-            ->where('lab_ingredient_id', $this->documentable_id)
+            ->where('lab_ingredient_id', $ownerId)
             ->whereIn('status', [
                 IngredientReviewStatus::Submitted,
                 IngredientReviewStatus::UnderReview,
             ])
             ->exists();
+    }
+
+    private static function isLabIngredientOwner(mixed $ownerType, mixed $ownerId): bool
+    {
+        return $ownerType === (new LabIngredient)->getMorphClass() && $ownerId !== null;
     }
 }
