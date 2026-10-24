@@ -24,9 +24,6 @@ use Illuminate\Validation\ValidationException;
     'type',
     'file_path',
     'original_name',
-    'mime_type',
-    'size',
-    'sha256',
     'version',
     'received_date',
     'issuer',
@@ -88,14 +85,6 @@ class Document extends Model
                 throw ValidationException::withMessages([
                     'documents' => 'Les documents soumis ne peuvent pas être modifiés pendant la revue.',
                 ]);
-            }
-
-            $storedMimeType = $document->getAttribute('mime_type');
-            $storedSize = $document->getAttribute('size');
-            $storedChecksum = $document->getAttribute('sha256');
-
-            if (is_string($storedMimeType) && is_int($storedSize) && is_string($storedChecksum)) {
-                return;
             }
 
             $disk = Storage::disk('local');

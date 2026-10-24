@@ -85,6 +85,66 @@ it('registers private document metadata and checksum', function () {
         ->and($document->documentable->is($ingredient))->toBeTrue();
 });
 
+it('ignores caller-supplied document metadata', function () {
+    Storage::fake('local');
+
+    $content = "%PDF-1.4\ncontrole serveur\n%%EOF\n";
+    Storage::disk('local')->put('documents/server-metadata.pdf', $content);
+
+    $ingredient = LabIngredient::factory()->create();
+    $document = $ingredient->documents()->create([
+        'type' => DocumentType::TechnicalSheet,
+        'file_path' => 'documents/server-metadata.pdf',
+        'original_name' => 'Fiche technique.pdf',
+        'mime_type' => 'image/png',
+        'size' => 1,
+        'sha256' => str_repeat('0', 64),
+        'version' => 1,
+        'received_date' => today(),
+        'control_status' => DocumentControlStatus::Received,
+        'access_level' => DocumentAccessLevel::Adherent,
+    ]);
+
+    expect($document->refresh()->mime_type)->toBe('application/pdf')
+        ->and($document->size)->toBe(strlen($content))
+        ->and($document->sha256)->toBe(hash('sha256', $content));
+});
+
+it('recomputes metadata even when forced', function () {
+    Storage::fake('local');
+
+    $content = "%PDF-1.4\nforce brute\n%%EOF\n";
+    Storage::disk('local')->put('documents/forced-metadata.pdf', $content);
+
+    $ingredient = LabIngredient::factory()->create();
+    $document = Document::forceCreate([
+        'documentable_type' => LabIngredient::class,
+        'documentable_id' => $ingredient->getKey(),
+        'type' => DocumentType::TechnicalSheet,
+        'file_path' => 'documents/forced-metadata.pdf',
+        'original_name' => 'Fiche forcée.pdf',
+        'mime_type' => 'image/png',
+        'size' => 1,
+        'sha256' => str_repeat('0', 64),
+        'version' => 1,
+        'received_date' => today(),
+        'control_status' => DocumentControlStatus::Received,
+        'access_level' => DocumentAccessLevel::Adherent,
+    ]);
+
+    expect($document->refresh()->mime_type)->toBe('application/pdf')
+        ->and($document->size)->toBe(strlen($content))
+        ->and($document->sha256)->toBe(hash('sha256', $content));
+});
+
+it('builds factory documents with a real stored file', function () {
+    $document = Document::factory()->create();
+
+    expect(Storage::disk('local')->exists($document->file_path))->toBeTrue()
+        ->and($document->mime_type)->toBe('application/pdf')
+        ->and($document->sha256)->toBe(hash('sha256', Storage::disk('local')->get($document->file_path)));
+});
+
 it('shows organic and document fields in the laboratory ingredient form', function () {
     $this->actingAs(User::factory()->admin()->create());
 

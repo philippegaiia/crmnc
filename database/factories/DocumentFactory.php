@@ -8,6 +8,7 @@ use App\Enums\DocumentType;
 use App\Models\Document;
 use App\Models\LabIngredient;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * @extends Factory<Document>
@@ -27,13 +28,20 @@ class DocumentFactory extends Factory
             'type' => DocumentType::TechnicalSheet,
             'file_path' => 'documents/'.fake()->uuid().'.pdf',
             'original_name' => fake()->word().'.pdf',
-            'mime_type' => 'application/pdf',
-            'size' => fake()->numberBetween(1_000, 2_000_000),
-            'sha256' => fake()->sha256(),
             'version' => 1,
             'received_date' => today(),
             'control_status' => DocumentControlStatus::Received,
             'access_level' => DocumentAccessLevel::Adherent,
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterMaking(function (Document $document): void {
+            Storage::disk('local')->put(
+                (string) $document->file_path,
+                "%PDF-1.4\n%crmnc factory\n%%EOF\n",
+            );
+        });
     }
 }

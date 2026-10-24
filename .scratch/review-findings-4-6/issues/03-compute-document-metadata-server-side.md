@@ -1,6 +1,6 @@
 # 03 — Always compute document MIME, size and SHA-256 from the stored file
 
-Status: ready-for-agent
+Status: resolved
 Finding: 6
 Blocked by: 01 (same files)
 
@@ -51,3 +51,13 @@ All existing tests in `IngredientReviewSubmissionTest.php` use `Document::factor
 
 - The tests above plus the full suite pass, and the gate in `spec.md` is green.
 - Committed as `fix: compute document metadata from the stored file`.
+
+## Comments
+
+- `Document` no longer accepts `mime_type`, `size` or `sha256` through mass assignment, and `creating` always reads the MIME type, size and SHA-256 from the file on the `local` disk, overwriting values supplied through `forceFill`/`forceCreate`. Existing French error messages are unchanged.
+- `DocumentFactory` no longer sets metadata. Its `configure()`/`afterMaking()` hook writes a small PDF stub to the generated `file_path` on the `local` disk, so the model computes `application/pdf` and the real checksum.
+- `tests/Pest.php` now fakes the `local` disk for every Feature test before each test, so factories never write to `storage/app/private`.
+- No document creation exists in `database/seeders`; nothing to change there.
+- Tests added to `tests/Feature/LabIngredientDocumentationTest.php`: `ignores caller-supplied document metadata`, `recomputes metadata even when forced`, `builds factory documents with a real stored file`.
+- Gate: 88 tests passing, PHPStan 0 errors, Filacheck 2 pre-existing `Placeholder` warnings. `graphify update .` run successfully.
+- Nothing left open; no deviation from the plan.
