@@ -150,6 +150,17 @@ class Document extends Model
                     'documents' => 'Les documents soumis ne peuvent pas être modifiés pendant la revue.',
                 ]);
             }
+
+            if ($document->isReviewed()
+                && array_diff(array_keys($document->getDirty()), [
+                    'control_status',
+                    'verified_by',
+                    'verified_at',
+                ]) !== []) {
+                throw ValidationException::withMessages([
+                    'documents' => 'Un document examiné ne peut pas être modifié ; ajoutez un nouveau document.',
+                ]);
+            }
         });
 
         static::deleting(function (Document $document): void {
@@ -158,7 +169,29 @@ class Document extends Model
                     'documents' => 'Les documents soumis ne peuvent pas être supprimés pendant la revue.',
                 ]);
             }
+
+            if ($document->isReviewed()) {
+                throw ValidationException::withMessages([
+                    'documents' => 'Un document examiné ne peut pas être supprimé.',
+                ]);
+            }
         });
+    }
+
+    /**
+     * Determine whether this document belongs to a submitted ingredient review snapshot.
+     */
+    public function isReviewed(): bool
+    {
+        if (! $this->exists || $this->documentable_type !== LabIngredient::class) {
+            return false;
+        }
+
+        return IngredientReview::query()
+            ->where('lab_ingredient_id', $this->documentable_id)
+            ->pluck('submitted_document_ids')
+            ->flatten()
+            ->contains($this->getKey());
     }
 
     private function belongsToPendingIngredientReview(): bool

@@ -5,9 +5,11 @@ namespace App\Filament\Resources\LabIngredients\Schemas;
 use App\Enums\DocumentType;
 use App\Enums\OrganicCertificationStatus;
 use App\Enums\UserRole;
+use App\Models\Document;
 use App\Models\IngredientRef;
 use App\Models\User;
 use App\Services\CompanyAccessService;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -93,13 +95,16 @@ class LabIngredientForm
                         Repeater::make('documents')
                             ->label('Documents')
                             ->relationship()
+                            ->helperText('Les documents déjà examinés sont figés ; ajoutez un nouveau document pour les remplacer.')
                             ->schema([
                                 Select::make('type')
                                     ->label('Type')
                                     ->options(DocumentType::class)
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
                                     ->required(),
                                 FileUpload::make('file_path')
                                     ->label('Fichier')
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
                                     ->disk('local')
                                     ->directory(fn (): string => 'documents/'.now()->format('Y/m'))
                                     ->visibility('private')
@@ -121,19 +126,30 @@ class LabIngredientForm
                                     ->columnSpanFull(),
                                 DatePicker::make('received_date')
                                     ->label('Reçu / émis le')
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
                                     ->default(today())
                                     ->required(),
                                 TextInput::make('issuer')
                                     ->label('Émetteur')
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
                                     ->maxLength(255),
                                 DatePicker::make('valid_from')
-                                    ->label('Valide du'),
+                                    ->label('Valide du')
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false),
                                 DatePicker::make('valid_until')
                                     ->label("Valide jusqu'au")
+                                    ->disabled(fn (?Document $record): bool => $record?->isReviewed() ?? false)
                                     ->afterOrEqual('valid_from'),
                             ])
                             ->columns(2)
                             ->addActionLabel('Ajouter un document')
+                            ->deleteAction(fn (Action $action): Action => $action->visible(
+                                function (array $arguments, Repeater $component): bool {
+                                    $record = $component->getCachedExistingRecords()->get($arguments['item'] ?? '');
+
+                                    return ! ($record instanceof Document && $record->isReviewed());
+                                },
+                            ))
                             ->collapsible()
                             ->columnSpanFull(),
                     ])
